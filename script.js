@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Lógica del modal (mantenerla por si se usa para registro de partidos)
+    // Lógica del modal para registrar resultados
     const modalCloseBtn = document.getElementById('modal-close-btn');
     if (modalCloseBtn) {
         modalCloseBtn.addEventListener('click', closeModal);
@@ -53,13 +53,21 @@ async function fetchAndRenderLeague() {
             renderLeagueView();
             populateTeamFilter(); // Rellenar el selector de parejas
         } else {
-            throw new Error(result.error);
+            // Si la API indica un error, lo mostramos
+            throw new Error(result.error || "Error desconocido al obtener datos de la API.");
         }
     } catch (error) {
         console.error("Error al cargar datos de la liga:", error);
-        document.getElementById('classification-table-body').innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error al cargar los datos.</td></tr>`;
+        // Mostrar un mensaje de error más visible al usuario
+        document.getElementById('classification-table-body').innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error al cargar la clasificación: ${error.message}</td></tr>`;
+        document.getElementById('matches-list-container').innerHTML = `<p style="color:red; text-align:center;">Error al cargar los partidos: ${error.message}</p>`;
+        
+        // Asegurarse de que los loaders se oculten incluso con error
+        hideLoaders(); 
     } finally {
-        hideLoaders();
+        // En este punto, los loaders ya deberían haberse ocultado en el catch o si todo fue bien.
+        // Pero para ser super seguros, podemos llamarlo aquí de nuevo si fuera necesario
+        // (aunque el catch ya lo hace).
     }
 }
 
@@ -81,7 +89,7 @@ function populateTeamFilter() {
 
 function renderClassificationTable(classification) {
     const tableBody = document.getElementById('classification-table-body');
-    tableBody.innerHTML = '';
+    tableBody.innerHTML = ''; // Limpiar cualquier mensaje de error anterior
     
     classification.forEach((team, index) => {
         const row = document.createElement('tr');
@@ -102,7 +110,7 @@ function renderClassificationTable(classification) {
 
 function renderMatchesList(matches) {
     const container = document.getElementById('matches-list-container');
-    container.innerHTML = '';
+    container.innerHTML = ''; // Limpiar cualquier mensaje de error anterior
     matches.forEach(match => {
         const matchEl = document.createElement('div');
         matchEl.className = 'match-item';
@@ -110,14 +118,15 @@ function renderMatchesList(matches) {
         let team1Name = `<span>${match['Nombre Pareja 1']}</span>`;
         let team2Name = `<span>${match['Nombre Pareja 2']}</span>`;
 
-        if (match.ganador == 1) {
+        // El backend debe enviar 'ganador' para que esto funcione
+        if (match.ganador === 1) { // Nota: Usar '===' para una comparación estricta si el backend envía número
             team1Name = `<strong class="winner">${match['Nombre Pareja 1']}</strong>`;
-        } else if (match.ganador == 2) {
+        } else if (match.ganador === 2) {
             team2Name = `<strong class="winner">${match['Nombre Pareja 2']}</strong>`;
         }
         
         const teams = `${team1Name} vs ${team2Name}`;
-        const resultHtml = (match.Estado === 'Jugado') 
+        const resultHtml = (match.Estado === 'Jugado' && match.Resultado) // También comprobar que 'Resultado' no sea nulo/vacío
             ? `<div class="match-result">${match.Resultado}</div>`
             : `<div class="match-result pending">Pendiente</div>`;
         
@@ -126,15 +135,16 @@ function renderMatchesList(matches) {
         // Añadir data-attributes para filtrar y resaltar
         matchEl.dataset.team1 = match['Nombre Pareja 1'];
         matchEl.dataset.team2 = match['Nombre Pareja 2'];
-        matchEl.dataset.matchId = match.ID; // Para abrir el modal
-
+        matchEl.dataset.matchId = match['ID Partido']; // CORRECCIÓN: Usar 'ID Partido' tal como viene de la API
+        
         container.appendChild(matchEl);
     });
 
     // Añadir event listeners a los partidos pendientes para abrir el modal
     document.querySelectorAll('.match-item.pending').forEach(item => {
         item.addEventListener('click', (e) => {
-            if (!e.target.closest('.match-actions')) { // Asegurarse de no clickear botones
+            // Asegurarse de que el click es en el div del partido, no en un elemento interno que pudiera tener su propio manejador.
+            if (item.dataset.matchId) { // Asegurarse de que el ID del partido existe
                 openResultModal(item.dataset.matchId);
             }
         });
@@ -172,7 +182,8 @@ function handleTeamSelection(selectedTeamName) {
 
         // Actualizar el enlace y mostrar el prompt de Telegram
         const teamNameForUrl = selectedTeam.Pareja.replace(/\s+/g, '-');
-        telegramLink.href = `https://t.me/Tu_Bot_Aqui?start=liga_team_${selectedTeam.Numero}_${teamNameForUrl}`; // ¡IMPORTANTE: Reemplazar 'Tu_Bot_Aqui' por el @ de tu bot!
+        // ¡IMPORTANTE: Reemplazar 'Tu_Bot_Aqui' por el @ de tu bot real!
+        telegramLink.href = `https://t.me/Tu_Bot_Aqui?start=liga_team_${selectedTeam.Numero}_${teamNameForUrl}`; 
         telegramPrompt.classList.remove('hidden');
     } else {
         statsContainer.classList.add('hidden');
@@ -196,10 +207,14 @@ function hideLoaders() {
 
 // Lógica del Modal (para registrar resultados)
 async function openResultModal(matchId) {
-    const match = leagueData.partidos.find(m => m.ID == matchId);
-    if (!match) return;
+    // Buscar el partido usando 'ID Partido' que es como viene de la API
+    const match = leagueData.partidos.find(m => m['ID Partido'] == matchId); 
+    if (!match) {
+        console.error("Partido no encontrado para el ID:", matchId);
+        return;
+    }
 
-    document.getElementById('match-id-input').value = match.ID;
+    document.getElementById('match-id-input').value = match['ID Partido'];
     document.getElementById('modal-team1-name').textContent = match['Nombre Pareja 1'];
     document.getElementById('modal-team2-name').textContent = match['Nombre Pareja 2'];
 
@@ -208,11 +223,11 @@ async function openResultModal(matchId) {
     document.getElementById('result-form-status').textContent = '';
     
     // Si el partido ya tiene resultado, precargarlo
-    if (match.Estado === 'Jugado') {
-        const scores = match.Resultado.split(', ').map(set => set.split('-').map(Number));
-        if (scores[0]) { document.getElementById('set1_p1').value = scores[0][0]; document.getElementById('set1_p2').value = scores[0][1]; }
-        if (scores[1]) { document.getElementById('set2_p1').value = scores[1][0]; document.getElementById('set2_p2').value = scores[1][1]; }
-        if (scores[2]) { document.getElementById('set3_p1').value = scores[2][0]; document.getElementById('set3_p2').value = scores[2][1]; }
+    if (match.Estado === 'Jugado' && match.Resultado) {
+        const scores = String(match.Resultado).split(', ').map(set => set.split('-').map(Number));
+        if (scores[0] && scores[0].length === 2) { document.getElementById('set1_p1').value = scores[0][0]; document.getElementById('set1_p2').value = scores[0][1]; }
+        if (scores[1] && scores[1].length === 2) { document.getElementById('set2_p1').value = scores[1][0]; document.getElementById('set2_p2').value = scores[1][1]; }
+        if (scores[2] && scores[2].length === 2) { document.getElementById('set3_p1').value = scores[2][0]; document.getElementById('set3_p2').value = scores[2][1]; }
     }
 
     document.getElementById('result-modal').classList.remove('hidden');
@@ -224,10 +239,10 @@ function closeModal() {
 
 async function handleResultSubmit(event) {
     event.preventDefault();
-    const matchId = document.getElementById('match-id-input').value;
+    const matchId = document.getElementById('match-id-input').value; // Este es el ID Partido
     const statusEl = document.getElementById('result-form-status');
     statusEl.textContent = 'Guardando...';
-    statusEl.style.color = 'var(--secondary-text-color)';
+    statusEl.style.color = 'var(--secondary-text-color)'; // Corrección aplicada aquí
 
     const s1_p1 = parseInt(document.getElementById('set1_p1').value) || 0;
     const s1_p2 = parseInt(document.getElementById('set1_p2').value) || 0;
@@ -237,6 +252,7 @@ async function handleResultSubmit(event) {
     const s3_p2 = parseInt(document.getElementById('set3_p2').value) || 0;
 
     const sets = [];
+    // Solo añadir sets si hay al menos un punto en alguno de los dos lados
     if (s1_p1 !== 0 || s1_p2 !== 0) sets.push(`${s1_p1}-${s1_p2}`);
     if (s2_p1 !== 0 || s2_p2 !== 0) sets.push(`${s2_p1}-${s2_p2}`);
     if (s3_p1 !== 0 || s3_p2 !== 0) sets.push(`${s3_p1}-${s3_p2}`);
@@ -253,7 +269,7 @@ async function handleResultSubmit(event) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'addMatchResult',
-                matchId: matchId,
+                matchId: matchId, // Enviar el ID Partido
                 resultado: sets.join(', ')
             })
         });
