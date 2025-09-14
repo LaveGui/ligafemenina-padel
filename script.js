@@ -41,30 +41,114 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+/**
+ * Carga los datos de la liga desde la API.
+ * Implementación basada en la sección 2.3 del informe técnico.
+ */
 async function fetchAndRenderLeague() {
-    showLoaders(); // Mostrar loaders al inicio
+    showLoaders();
     try {
-        const response = await fetch(`${API_URL}?endpoint=getLeagueData`);
+        const response = await fetch(`${API_URL}?endpoint=getLeagueData`, {
+            method: 'GET',
+            redirect: 'follow' // CRÍTICO: Para manejar la redirección de Google
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status} ${response.statusText}`);
+        }
+        
         const result = await response.json();
 
-        if (result.success && result.data) { // Asegurarse de que 'data' existe
-            leagueData = result.data;
-            // CORRECCIÓN: allTeams debe tomar los datos de leagueData.parejas
-            allTeams = leagueData.parejas || []; 
-            
-            renderLeagueView();
-            populateTeamFilter(); 
-        } else {
-            // Si la API indica un error o 'data' no existe, lo mostramos
-            throw new Error(result.error || "Datos de la API no válidos o incompletos.");
+        if (!result.success) {
+            throw new Error(result.error || 'La API devolvió un error no especificado.');
         }
+
+        // El resto de la lógica sigue igual
+        leagueData = result.data;
+        allTeams = leagueData.parejas || [];
+        renderLeagueView();
+        populateTeamFilter();
+
     } catch (error) {
         console.error("Error al cargar datos de la liga:", error);
-        // Mostrar un mensaje de error más visible al usuario
         document.getElementById('classification-table-body').innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error al cargar la clasificación: ${error.message}</td></tr>`;
         document.getElementById('matches-list-container').innerHTML = `<p style="color:red; text-align:center;">Error al cargar los partidos: ${error.message}</p>`;
     } finally {
-        hideLoaders(); // Ocultar loaders siempre al finalizar, haya habido error o no
+        hideLoaders();
+    }
+}
+
+
+/**
+ * Envía el resultado de un partido a la API.
+ * Implementación basada en la sección 2.3 del informe técnico para evitar CORS.
+ */
+async function handleResultSubmit(event) {
+    event.preventDefault();
+    const statusEl = document.getElementById('result-form-status');
+    statusEl.textContent = 'Guardando...';
+
+    // Construcción de los datos del resultado
+    const matchId = document.getElementById('match-id-input').value;
+    const s1_p1 = document.getElementById('set1_p1').value, s1_p2 = document.getElementById('set1_p2').value;
+    const s2_p1 = document.getElementById('set2_p1').value, s2_p2 = document.getElementById('set2_p2').value;
+    const s3_p1 = document.getElementById('set3_p1').value, s3_p2 = document.getElementById('set3_p2').value;
+    
+    let sets = [];
+    if(s1_p1 && s1_p2) sets.push(`${s1_p1}-${s1_p2}`);
+    if(s2_p1 && s2_p2) sets.push(`${s2_p1}-${s2_p2}`);
+    if(s3_p1 && s3_p2) sets.push(`${s3_p1}-${s3_p2}`);
+
+    if (sets.length === 0) {
+        statusEl.textContent = 'Introduce al menos un set.';
+        return;
+    }
+
+    // El payload completo que se enviará, incluyendo la acción para el enrutamiento
+    const payload = {
+        action: 'addMatchResult',
+        data: {
+            matchId: matchId,
+            resultado: sets.join(', ')
+        }
+    };
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            redirect: 'follow', // CRÍTICO: Para manejar la redirección de Google
+            headers: {
+                // CRÍTICO: Envía como texto plano para evitar la pre-verificación de CORS
+                'Content-Type': 'text/plain;charset=utf-8',
+            },
+            // CRÍTICO: Convierte el objeto a una cadena de texto antes de enviarlo
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error HTTP: ${response.status}`);
+        }
+        
+        const result = await response.json();
+
+        if (!result.success) {
+            throw new Error(result.error || 'La API devolvió un error al registrar el resultado.');
+        }
+        
+        // Éxito
+        statusEl.textContent = 'Resultado guardado correctamente.';
+        statusEl.style.color = '#27ae60';
+        await fetchAndRenderLeague();
+        const selectedTeam = document.getElementById('team-filter').value;
+        if (selectedTeam) {
+            handleTeamSelection(selectedTeam);
+        }
+        setTimeout(closeModal, 1500);
+
+    } catch (error) {
+        console.error("Error al guardar el resultado:", error);
+        statusEl.textContent = `Error: ${error.message}`;
+        statusEl.style.color = 'red';
     }
 }
 
