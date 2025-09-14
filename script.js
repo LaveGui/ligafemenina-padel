@@ -125,10 +125,24 @@ function renderMatchesList(matches) {
     const container = document.getElementById('matches-list-container');
     container.innerHTML = ''; 
 
-    if (Array.isArray(matches) && matches.length > 0) { // CORRECCIÓN: Asegurarse de que tiene elementos
+    if (Array.isArray(matches) && matches.length > 0) {
         matches.forEach(match => {
             const matchEl = document.createElement('div');
-            matchEl.className = 'match-item';
+            // MODIFICACIÓN CRÍTICA AQUÍ: Añadir 'pending' al matchEl si el estado es 'Pendiente'
+            let matchClasses = 'match-item';
+            let resultText = ''; // Para el texto dentro del resultado
+
+            if (match.Estado.toLowerCase() === 'pendiente') {
+                matchClasses += ' pending'; // Añade la clase 'pending' al contenedor principal
+                resultText = 'Pendiente';
+            } else if (match.Estado.toLowerCase() === 'jugado' && match.Resultado) {
+                matchClasses += ' played'; // Clase 'played' para partidos jugados (opcional, pero buena práctica)
+                resultText = match.Resultado;
+            } else {
+                resultText = 'Desconocido'; // Por si el estado no es ni jugado ni pendiente
+            }
+
+            matchEl.className = matchClasses; // Asigna las clases al div principal
             
             const nombrePareja1 = match['Nombre Pareja 1'] || 'Pareja Desconocida 1';
             const nombrePareja2 = match['Nombre Pareja 2'] || 'Pareja Desconocida 2';
@@ -136,6 +150,11 @@ function renderMatchesList(matches) {
             let team1Name = `<span>${nombrePareja1}</span>`;
             let team2Name = `<span>${nombrePareja2}</span>`;
 
+            // Aquí podrías añadir la lógica para el 'ganador' si viene de la API
+            // Sin embargo, la clasificación se está recalculando en el backend, así que este 'ganador'
+            // en 'match' puede no ser el definitivo si lo usas de la API original.
+            // Para la UI, podrías querer calcularlo de nuevo o esperar que la API lo envíe precalculado.
+            // Por ahora, lo mantenemos como estaba en tu código original.
             if (match.ganador === 1) { 
                 team1Name = `<strong class="winner">${nombrePareja1}</strong>`;
             } else if (match.ganador === 2) {
@@ -143,20 +162,19 @@ function renderMatchesList(matches) {
             }
             
             const teams = `${team1Name} vs ${team2Name}`;
-            const resultHtml = (match.Estado === 'Jugado' && match.Resultado) 
-                ? `<div class="match-result">${match.Resultado}</div>`
-                : `<div class="match-result pending">Pendiente</div>`;
+            // El div de resultado ahora solo mostrará el texto, la clase 'pending' va en el contenedor
+            const resultHtml = `<div class="match-result-text">${resultText}</div>`;
             
             matchEl.innerHTML = `<div class="match-teams">${teams}</div>${resultHtml}`;
             
             matchEl.dataset.team1 = nombrePareja1; 
             matchEl.dataset.team2 = nombrePareja2;
-            matchEl.dataset.matchId = match['ID Partido']; // Correcto: 'ID Partido'
+            matchEl.dataset.matchId = match['ID Partido'];
             
             container.appendChild(matchEl);
         });
 
-        // Añadir event listeners a los partidos pendientes para abrir el modal
+        // Este selector ahora sí encontrará los elementos correctos
         document.querySelectorAll('.match-item.pending').forEach(item => {
             item.addEventListener('click', (e) => {
                 if (item.dataset.matchId) { 
