@@ -2,7 +2,6 @@
 // DEBES REEMPLAZAR ESTA URL POR LA NUEVA URL DE TU API DE GOOGLE APPS SCRIPT PARA ESTA LIGA
 const API_URL = "https://script.google.com/macros/s/AKfycbzHHNHv7nq-rPmb_t7hfoEXPOqHwrxiLy_zomf89JtWoZm9E9dgIcvLhJuRcKRMEDSrrw/exec"; 
 
-
 let leagueData = {}; // Almacenará todos los datos de la liga
 let allTeams = []; // Para almacenar las parejas y popular el selector
 
@@ -50,7 +49,9 @@ async function fetchAndRenderLeague() {
 
         if (result.success && result.data) { // Asegurarse de que 'data' existe
             leagueData = result.data;
-            allTeams = leagueData.parejas || []; // Asegurarse de que 'parejas' es un array
+            // CORRECCIÓN: allTeams debe tomar los datos de leagueData.parejas
+            allTeams = leagueData.parejas || []; 
+            
             renderLeagueView();
             populateTeamFilter(); 
         } else {
@@ -60,43 +61,45 @@ async function fetchAndRenderLeague() {
     } catch (error) {
         console.error("Error al cargar datos de la liga:", error);
         // Mostrar un mensaje de error más visible al usuario
-        document.getElementById('classification-table-body').innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error al cargar la clasificación. ${error.message}</td></tr>`;
-        document.getElementById('matches-list-container').innerHTML = `<p style="color:red; text-align:center;">Error al cargar los partidos. ${error.message}</p>`;
+        document.getElementById('classification-table-body').innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">Error al cargar la clasificación: ${error.message}</td></tr>`;
+        document.getElementById('matches-list-container').innerHTML = `<p style="color:red; text-align:center;">Error al cargar los partidos: ${error.message}</p>`;
     } finally {
         hideLoaders(); // Ocultar loaders siempre al finalizar, haya habido error o no
     }
 }
 
 function renderLeagueView() {
-    renderClassificationTable(leagueData.clasificacion);
+    // CORRECCIÓN: Pasa leagueData.clasificacion a renderClassificationTable
+    // El "error al cargar la clasificación" ya fue resuelto con la revisión anterior
+    renderClassificationTable(leagueData.clasificacion); 
     renderMatchesList(leagueData.partidos);
 }
 
 function populateTeamFilter() {
     const teamFilter = document.getElementById('team-filter');
     teamFilter.innerHTML = '<option value="">-- Selecciona tu pareja --</option>'; // Resetear opciones
-    // Solo si allTeams es un array, intentar iterar
-    if (Array.isArray(allTeams)) {
+    
+    if (Array.isArray(allTeams) && allTeams.length > 0) { // CORRECCIÓN: Asegurarse de que allTeams tiene elementos
         allTeams.forEach(team => {
             const option = document.createElement('option');
-            option.value = team.Pareja;
+            option.value = team.Pareja; // El valor de la opción es el nombre de la pareja
             option.textContent = team.Pareja;
             teamFilter.appendChild(option);
         });
     } else {
-        console.warn("allTeams no es un array, no se pudo poblar el filtro de parejas.");
+        console.warn("No hay parejas cargadas para poblar el filtro.");
+        // Opcional: Mostrar un mensaje en el selector si no hay parejas
+        // teamFilter.innerHTML = '<option value="">-- No hay parejas disponibles --</option>';
     }
 }
 
 function renderClassificationTable(classification) {
     const tableBody = document.getElementById('classification-table-body');
-    tableBody.innerHTML = ''; // Limpiar cualquier mensaje de error anterior
+    tableBody.innerHTML = ''; 
     
-    // CORRECCIÓN: Asegurarse de que 'classification' es un array antes de intentar iterar
-    if (Array.isArray(classification)) {
+    if (Array.isArray(classification) && classification.length > 0) { // CORRECCIÓN: Asegurarse de que tiene elementos
         classification.forEach((team, index) => {
             const row = document.createElement('tr');
-            // Asegurarse de que 'Pareja' existe para evitar errores
             const teamName = team.Pareja ? (team.isOnFire ? `${team.Pareja} 🔥` : team.Pareja) : 'Nombre desconocido';
             
             row.innerHTML = `
@@ -107,36 +110,32 @@ function renderClassificationTable(classification) {
                 <td>${team.DS || 0}</td>
                 <td>${team.DJ || 0}</td>
             `;
-            // Asegurarse de que team.Pareja existe antes de asignarlo a dataset
             if (team.Pareja) {
               row.dataset.teamName = team.Pareja; 
             }
             tableBody.appendChild(row);
         });
     } else {
-        tableBody.innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">No se pudo cargar la clasificación.</td></tr>`;
-        console.error("Los datos de clasificación no son un array:", classification);
+        tableBody.innerHTML = `<tr><td colspan="6" style="color:red; text-align:center;">No se pudo cargar la clasificación o está vacía.</td></tr>`;
+        console.error("Los datos de clasificación no son un array válido o están vacíos:", classification);
     }
 }
 
 function renderMatchesList(matches) {
     const container = document.getElementById('matches-list-container');
-    container.innerHTML = ''; // Limpiar cualquier mensaje de error anterior
+    container.innerHTML = ''; 
 
-    // CORRECCIÓN: Asegurarse de que 'matches' es un array antes de intentar iterar
-    if (Array.isArray(matches)) {
+    if (Array.isArray(matches) && matches.length > 0) { // CORRECCIÓN: Asegurarse de que tiene elementos
         matches.forEach(match => {
             const matchEl = document.createElement('div');
             matchEl.className = 'match-item';
             
-            // Asegurarse de que los nombres de las parejas existen
             const nombrePareja1 = match['Nombre Pareja 1'] || 'Pareja Desconocida 1';
             const nombrePareja2 = match['Nombre Pareja 2'] || 'Pareja Desconocida 2';
 
             let team1Name = `<span>${nombrePareja1}</span>`;
             let team2Name = `<span>${nombrePareja2}</span>`;
 
-            // El backend debe enviar 'ganador' para que esto funcione
             if (match.ganador === 1) { 
                 team1Name = `<strong class="winner">${nombrePareja1}</strong>`;
             } else if (match.ganador === 2) {
@@ -150,8 +149,7 @@ function renderMatchesList(matches) {
             
             matchEl.innerHTML = `<div class="match-teams">${teams}</div>${resultHtml}`;
             
-            // Añadir data-attributes para filtrar y resaltar
-            matchEl.dataset.team1 = nombrePareja1; // Usar el nombre de pareja ya verificado
+            matchEl.dataset.team1 = nombrePareja1; 
             matchEl.dataset.team2 = nombrePareja2;
             matchEl.dataset.matchId = match['ID Partido']; // Correcto: 'ID Partido'
             
@@ -163,12 +161,14 @@ function renderMatchesList(matches) {
             item.addEventListener('click', (e) => {
                 if (item.dataset.matchId) { 
                     openResultModal(item.dataset.matchId);
+                } else {
+                    console.error("No se encontró 'data-match-id' en el elemento del partido:", item);
                 }
             });
         });
     } else {
-        container.innerHTML = `<p style="color:red; text-align:center;">No se pudieron cargar los partidos.</p>`;
-        console.error("Los datos de partidos no son un array:", matches);
+        container.innerHTML = `<p style="color:red; text-align:center;">No se pudieron cargar los partidos o la lista está vacía.</p>`;
+        console.error("Los datos de partidos no son un array válido o están vacíos:", matches);
     }
 }
 
@@ -182,7 +182,7 @@ function handleTeamSelection(selectedTeamName) {
 
     if (!selectedTeamName) {
         statsContainer.classList.add('hidden');
-        telegramPrompt.classList.add('hidden'); // Ocultar si no hay selección
+        telegramPrompt.classList.add('hidden'); 
         return;
     }
 
@@ -191,7 +191,8 @@ function handleTeamSelection(selectedTeamName) {
     document.querySelectorAll('.match-item').forEach(item => item.classList.toggle('highlighted', item.dataset.team1 === selectedTeamName || item.dataset.team2 === selectedTeamName));
 
     // Mostrar estadísticas
-    const selectedTeam = leagueData.clasificacion.find(team => team.Pareja === selectedTeamName);
+    // Asegurarse de que leagueData.clasificacion es un array antes de buscar
+    const selectedTeam = Array.isArray(leagueData.clasificacion) ? leagueData.clasificacion.find(team => team.Pareja === selectedTeamName) : null;
     if (selectedTeam) {
         document.getElementById('stat-pj').textContent = selectedTeam.PJ || 0;
         document.getElementById('stat-puntos').textContent = selectedTeam.Puntos || 0;
@@ -201,21 +202,19 @@ function handleTeamSelection(selectedTeamName) {
         document.getElementById('stat-jc').textContent = selectedTeam.JC || 0;
         statsContainer.classList.remove('hidden');
 
-        // Actualizar el enlace y mostrar el prompt de Telegram
         const teamNameForUrl = selectedTeam.Pareja ? selectedTeam.Pareja.replace(/\s+/g, '-') : 'EquipoDesconocido';
-        // ¡IMPORTANTE: Reemplazar 'Tu_Bot_Aqui' por el @ de tu bot real!
         telegramLink.href = `https://t.me/Tu_Bot_Aqui?start=liga_team_${selectedTeam.Numero}_${teamNameForUrl}`; 
         telegramPrompt.classList.remove('hidden');
     } else {
         statsContainer.classList.add('hidden');
         telegramPrompt.classList.add('hidden');
+        console.warn(`No se encontraron estadísticas para la pareja seleccionada: ${selectedTeamName}`);
     }
 }
 
 function showLoaders() {
     document.getElementById('classification-loader').classList.remove('hidden');
     document.getElementById('matches-loader').classList.remove('hidden');
-    // Ocultar las tablas mientras los loaders están visibles
     document.querySelector('.table-wrapper').classList.add('hidden');
     document.getElementById('matches-list-container').classList.add('hidden');
 }
@@ -223,17 +222,15 @@ function showLoaders() {
 function hideLoaders() {
     document.getElementById('classification-loader').classList.add('hidden');
     document.getElementById('matches-loader').classList.add('hidden');
-    // Mostrar las tablas después de ocultar los loaders
     document.querySelector('.table-wrapper').classList.remove('hidden');
     document.getElementById('matches-list-container').classList.remove('hidden');
 }
 
 // Lógica del Modal (para registrar resultados)
 async function openResultModal(matchId) {
-    // Buscar el partido usando 'ID Partido' que es como viene de la API
-    const match = leagueData.partidos.find(m => m['ID Partido'] == matchId); 
+    const match = Array.isArray(leagueData.partidos) ? leagueData.partidos.find(m => m['ID Partido'] == matchId) : null; 
     if (!match) {
-        console.error("Partido no encontrado para el ID:", matchId);
+        console.error("Partido no encontrado para el ID:", matchId, "en los datos de la liga.");
         return;
     }
 
@@ -241,11 +238,9 @@ async function openResultModal(matchId) {
     document.getElementById('modal-team1-name').textContent = match['Nombre Pareja 1'] || 'Pareja 1';
     document.getElementById('modal-team2-name').textContent = match['Nombre Pareja 2'] || 'Pareja 2';
 
-    // Limpiar inputs y status
     document.querySelectorAll('.score-input').forEach(input => input.value = '');
     document.getElementById('result-form-status').textContent = '';
     
-    // Si el partido ya tiene resultado, precargarlo
     if (match.Estado === 'Jugado' && match.Resultado) {
         const scores = String(match.Resultado).split(', ').map(set => set.split('-').map(Number));
         if (scores[0] && scores[0].length === 2 && !isNaN(scores[0][0])) { document.getElementById('set1_p1').value = scores[0][0]; document.getElementById('set1_p2').value = scores[0][1]; }
@@ -262,10 +257,10 @@ function closeModal() {
 
 async function handleResultSubmit(event) {
     event.preventDefault();
-    const matchId = document.getElementById('match-id-input').value; // Este es el ID Partido
+    const matchId = document.getElementById('match-id-input').value; 
     const statusEl = document.getElementById('result-form-status');
     statusEl.textContent = 'Guardando...';
-    statusEl.style.color = 'var(--secondary-text-color)'; // Corrección aplicada aquí
+    statusEl.style.color = 'var(--secondary-text-color)'; 
 
     const s1_p1 = parseInt(document.getElementById('set1_p1').value) || 0;
     const s1_p2 = parseInt(document.getElementById('set1_p2').value) || 0;
@@ -275,7 +270,6 @@ async function handleResultSubmit(event) {
     const s3_p2 = parseInt(document.getElementById('set3_p2').value) || 0;
 
     const sets = [];
-    // Solo añadir sets si hay al menos un punto en alguno de los dos lados
     if (s1_p1 !== 0 || s1_p2 !== 0) sets.push(`${s1_p1}-${s1_p2}`);
     if (s2_p1 !== 0 || s2_p2 !== 0) sets.push(`${s2_p1}-${s2_p2}`);
     if (s3_p1 !== 0 || s3_p2 !== 0) sets.push(`${s3_p1}-${s3_p2}`);
@@ -292,7 +286,7 @@ async function handleResultSubmit(event) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'addMatchResult',
-                matchId: matchId, // Enviar el ID Partido
+                matchId: matchId, 
                 resultado: sets.join(', ')
             })
         });
@@ -301,14 +295,12 @@ async function handleResultSubmit(event) {
         if (result.success) {
             statusEl.textContent = 'Resultado guardado correctamente.';
             statusEl.style.color = '#27ae60';
-            // Refrescar los datos de la liga después de guardar el resultado
             await fetchAndRenderLeague(); 
-            // Vuelve a aplicar el filtro si había uno seleccionado
             const selectedTeam = document.getElementById('team-filter').value;
             if (selectedTeam) {
                 handleTeamSelection(selectedTeam);
             }
-            setTimeout(closeModal, 1500); // Cerrar modal después de un breve delay
+            setTimeout(closeModal, 1500); 
         } else {
             throw new Error(result.error);
         }
